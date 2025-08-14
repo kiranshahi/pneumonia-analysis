@@ -1,0 +1,89 @@
+
+import argparse
+
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
+import numpy as np
+import cv2
+
+from .model import create_model
+from .utils import IMAGENET_MEAN, IMAGENET_STD
+
+def preprocess(img_path: str, img_size: int = 224):
+    tfm = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.Grayscale(num_output_channels=3),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+    ])
+    img = Image.open(img_path).convert("L").convert("RGB")
+    return tfm(img).unsqueeze(0), np.array(img)
+
+def gradcam_on_image(model, img_tensor, target_layer):
+    activations = []
+    gradients = []
+
+    def fwd_hook(module, inp, out):
+        activations.append(out.detach())
+
+    def bwd_hook(module, grad_in, grad_out):
+        gradients.append(grad_out[0].detach())
+
+    h1 = target_layer.register_forward_hook(fwd_hook)
+    h2 = target_layer.register_full_backward_hook(bwd_hook)
+
+    logits = model(img_tensor)
+    pred_class = logits.argmax(1).item()
+    score = logits[0, pred_class]
+    model.zero_grad()
+    score.backward()
+
+    h1.remove(); h2.remove()
+
+    act = activations[0]          # [1, C, H, W]
+    grad = gradients[0]           # [1, C, H, W]
+    weights = grad.mean(dim=(2,3), keepdim=True)   # [1, C, 1, 1]
+    cam = (weights * act).sum(dim=1, keepdim=False)  # [1, H, W]
+    cam = F.relu(cam)[0].cpu().numpy()
+    cam = (cam - cam.min()) / (cam.max() + 1e-8)
+    return cam, pred_class
+
+def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
+    heatmap = cv2.applyColorMap((cam*255).astype(np.uint8), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    overlay = (alpha*heatmap + (1-alpha)*orig_img_bgr).astype(np.uint8)
+    return overlay
+
+def main():
+    parser = argparse.ArgumentParser(description="Grad-CAM visualization")
+    parser.add_argument("--checkpoint", type=str, required=True)
+    parser.add_argument("--image_path", type=str, required=True)
+    parser.add_argument("--img_size", type=int, default=224)
+    parser.add_argument("--out_path", type=str, default="gradcam_overlay.png")
+    args = parser.parse_args()
+
+    ckpt = torch.load(args.checkpoint, map_location="cpu")
+    arch = ckpt.get("arch","resnet18")
+    model = create_model(num_classes=len(ckpt.get("class_to_idx", {0:'Normal',1:'Pneumonia'})), arch=arch, pretrained=False)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+
+    x, orig = preprocess(args.image_path, img_size=ckpt.get("img_size", args.img_size))
+    # pick a last conv layer based on arch
+    target_layer = None
+    if arch == "resnet18":
+        target_layer = model.backbone.layer4[-1].conv2
+    elif arch == "densenet121":
+        target_layer = model.backbone.features.denseblock4.denselayer16.conv2
+    else:  # efficientnet_b0
+        target_layer = model.backbone.features[-1][0]  # last conv
+    cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer)
+    orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
+    overlay = overlay_heatmap(orig_bgr, cam)
+    cv2.imwrite(args.out_path, overlay)
+    print(f"Saved Grad-CAM to {args.out_path}. Pred class id: {pred_class}")
+
+if __name__ == "__main__":
+    main()
