@@ -1,12 +1,12 @@
 
-# Pneumonia CNN (multi-model/ensemble) — Colab-friendly Project
+# Pneumonia CNN — Colab-friendly Project
 
 Train, evaluate, and visualize Grad-CAM for binary chest X-ray classification (Normal vs Pneumonia) with **consistent preprocessing**, **patient-wise split**, and **multi-model ensembling**.
 
 ## Project layout
 ```
-pneumonia_cnn_ensemble_project/
-  pneumonia_cnn/
+pneumonia-analysis/
+  src/
     __init__.py
     data.py
     model.py
