@@ -39,34 +39,34 @@ data_dir = '/content/drive/MyDrive/Chest_xray'  # adjust
 
 ### Train single model (choose arch)
 ```bash
-python -m pneumonia_cnn.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/resnet18" --epochs 5 --arch resnet18
-python -m pneumonia_cnn.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/densenet121" --epochs 5 --arch densenet121
-python -m pneumonia_cnn.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/efficientnet_b0" --epochs 5 --arch efficientnet_b0
+python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/resnet18" --epochs 5 --arch resnet18
+python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/densenet121" --epochs 5 --arch densenet121
+python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/efficientnet_b0" --epochs 5 --arch efficientnet_b0
 ```
 
 ### Train many in one go
 ```bash
-python -m pneumonia_cnn.train_many --data_dir "$data_dir" --out_root "/content/drive/MyDrive/pneumonia_runs/archs" --epochs 5
+python -m src.train_many --data_dir "$data_dir" --out_root "/content/drive/MyDrive/pneumonia_runs/archs" --epochs 5
 ```
 
 ### Evaluate a single model
 ```bash
-python -m pneumonia_cnn.eval --data_dir "$data_dir" --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt"
+python -m src.eval --data_dir "$data_dir" --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt"
 ```
 
 ### Evaluate an ensemble
 Uniform average:
 ```bash
-python -m pneumonia_cnn.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,/content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,/content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt"   --weights uniform
+python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,/content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,/content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt"   --weights uniform
 ```
 AUC-weighted average (uses validation AUC stored in each checkpoint):
 ```bash
-python -m pneumonia_cnn.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,/content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,/content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt"   --weights auto_auc
+python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,/content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,/content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt"   --weights auto_auc
 ```
 
 ### Grad-CAM on any trained checkpoint
 ```bash
-python -m pneumonia_cnn.gradcam --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt" --image_path "/content/drive/MyDrive/Chest_xray/Pneumonia/person1413_virus_2423.jpg" --out_path "/content/gradcam_resnet18.png"
+python -m src.gradcam --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt" --image_path "/content/drive/MyDrive/Chest_xray/Pneumonia/person1413_virus_2423.jpg" --out_path "/content/gradcam_resnet18.png"
 ```
 
 **Notes**
