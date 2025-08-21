@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from .data import make_loaders
 from .model import create_model
+from .utils import load_checkpoint
 
 @torch.no_grad()
 def predict(model, loader, device):
@@ -33,7 +34,7 @@ def main():
     loaders, class_to_idx = make_loaders(args.data_dir, batch_size=args.batch_size, img_size=args.img_size)
     idx_to_class = {v:k for k,v in class_to_idx.items()}
 
-    ckpt = torch.load(args.checkpoint, map_location="cpu")
+    ckpt = load_checkpoint(args.checkpoint)
     arch = ckpt.get("arch","resnet18")
     model = create_model(num_classes=len(class_to_idx), arch=arch, pretrained=False)
     model.load_state_dict(ckpt["model_state"])

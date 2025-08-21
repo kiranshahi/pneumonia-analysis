@@ -10,6 +10,7 @@ import numpy as np
 
 from .data import make_loaders
 from .model import create_model
+from .utils import load_checkpoint
 
 @torch.no_grad()
 def predict_logits(model, loader, device):
@@ -37,7 +38,7 @@ def main():
     ckpt_paths = [p.strip() for p in args.checkpoints.split(",") if p.strip()]
     models, metas = [], []
     for p in ckpt_paths:
-        ckpt = torch.load(p, map_location="cpu")
+        ckpt = load_checkpoint(p)
         arch = ckpt.get("arch","resnet18")
         model = create_model(num_classes=len(class_to_idx), arch=arch, pretrained=False)
         model.load_state_dict(ckpt["model_state"])

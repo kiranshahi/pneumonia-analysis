@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 
 from .model import create_model
-from .utils import IMAGENET_MEAN, IMAGENET_STD
+from .utils import IMAGENET_MEAN, IMAGENET_STD, load_checkpoint
 
 def preprocess(img_path: str, img_size: int = 224):
     tfm = transforms.Compose([
@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--out_path", type=str, default="gradcam_overlay.png")
     args = parser.parse_args()
 
-    ckpt = torch.load(args.checkpoint, map_location="cpu")
+    ckpt = load_checkpoint(args.checkpoint)
     arch = ckpt.get("arch","resnet18")
     model = create_model(num_classes=len(ckpt.get("class_to_idx", {0:'Normal',1:'Pneumonia'})), arch=arch, pretrained=False)
     model.load_state_dict(ckpt["model_state"])
