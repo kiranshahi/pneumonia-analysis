@@ -4,7 +4,9 @@ import torch.nn as nn
 from torchvision.models import (
     resnet18, ResNet18_Weights,
     densenet121, DenseNet121_Weights,
-    efficientnet_b0, EfficientNet_B0_Weights
+    efficientnet_b0, EfficientNet_B0_Weights,
+    resnet50, ResNet50_Weights,
+    mobilenet_v2, MobileNet_V2_Weights
 )
 
 def _make_backbone(arch: str, pretrained: bool = True):
