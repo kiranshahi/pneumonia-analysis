@@ -4,7 +4,14 @@ from pathlib import Path
 import subprocess
 import sys
 
-ARCHS = ["resnet18","densenet121","efficientnet_b0"]
+ARCHS = [
+    "resnet18",
+    "densenet121",
+    "efficientnet_b0",
+    "resnet50",
+    "mobilenet_v2",
+    "vit_b_16",
+]
 
 def main():
     parser = argparse.ArgumentParser(description="Train multiple architectures sequentially")

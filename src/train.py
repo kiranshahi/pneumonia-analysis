@@ -62,7 +62,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--no_pretrained", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
-    parser.add_argument("--arch", type=str, default="resnet18", choices=["resnet18","densenet121","efficientnet_b0"])
+    parser.add_argument("--arch", type=str, default="resnet18", choices=["resnet18","densenet121","efficientnet_b0","resnet50","mobilenet_v2","vit_b_16"])
     args = parser.parse_args()
 
     set_seed(args.seed)

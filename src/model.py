@@ -6,7 +6,8 @@ from torchvision.models import (
     densenet121, DenseNet121_Weights,
     efficientnet_b0, EfficientNet_B0_Weights,
     resnet50, ResNet50_Weights,
-    mobilenet_v2, MobileNet_V2_Weights
+    mobilenet_v2, MobileNet_V2_Weights,
+    vit_b_16, ViT_B_16_Weights,
 )
 
 def _make_backbone(arch: str, pretrained: bool = True):
@@ -26,6 +27,21 @@ def _make_backbone(arch: str, pretrained: bool = True):
         backbone = efficientnet_b0(weights=weights)
         in_features = backbone.classifier[-1].in_features
         head_attr = "classifier_seq"
+    elif arch == "resnet50":
+        weights = ResNet50_Weights.DEFAULT if pretrained else None
+        backbone = resnet50(weights=weights)
+        in_features = backbone.fc.in_features
+        head_attr = "fc"
+    elif arch == "mobilenet_v2":
+        weights = MobileNet_V2_Weights.DEFAULT if pretrained else None
+        backbone = mobilenet_v2(weights=weights)
+        in_features = backbone.classifier[-1].in_features
+        head_attr = "classifier_seq"
+    elif arch == "vit_b_16":
+        weights = ViT_B_16_Weights.DEFAULT if pretrained else None
+        backbone = vit_b_16(weights=weights)
+        in_features = backbone.heads.head.in_features
+        head_attr = "vit_head"
     else:
         raise ValueError(f"Unknown arch: {arch}")
     return backbone, in_features, head_attr
@@ -39,10 +55,14 @@ class PneumoniaNet(nn.Module):
             self.backbone.fc = nn.Linear(in_features, num_classes)
         elif head_attr == "classifier":
             self.backbone.classifier = nn.Linear(in_features, num_classes)
-        else:  # classifier_seq for efficientnet
+        elif head_attr == "classifier_seq":
             layers = list(self.backbone.classifier.children())
             layers[-1] = nn.Linear(in_features, num_classes)
             self.backbone.classifier = nn.Sequential(*layers)
+        elif head_attr == "vit_head":
+            self.backbone.heads.head = nn.Linear(in_features, num_classes)
+        else:
+            raise ValueError(f"Unknown head_attr: {head_attr}")
 
     def forward(self, x):
         return self.backbone(x)

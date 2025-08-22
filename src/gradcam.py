@@ -75,14 +75,22 @@ def main():
     model.eval()
 
     x, orig = preprocess(args.image_path, img_size=ckpt.get("img_size", args.img_size))
-    # pick a last conv layer based on arch
+    # pick a last conv/transformer layer based on arch
     target_layer = None
     if arch == "resnet18":
         target_layer = model.backbone.layer4[-1].conv2
+    elif arch == "resnet50":
+        target_layer = model.backbone.layer4[-1].conv3
     elif arch == "densenet121":
         target_layer = model.backbone.features.denseblock4.denselayer16.conv2
-    else:  # efficientnet_b0
-        target_layer = model.backbone.features[-1][0]  # last conv
+    elif arch == "mobilenet_v2":
+        target_layer = model.backbone.features[-1][0]
+    elif arch == "efficientnet_b0":
+        target_layer = model.backbone.features[-1][0]
+    elif arch == "vit_b_16":
+        raise NotImplementedError("Grad-CAM not implemented for vit_b_16")
+    else:
+        raise ValueError(f"Unknown arch for Grad-CAM: {arch}")
     cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer)
     orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
     overlay = overlay_heatmap(orig_bgr, cam)
