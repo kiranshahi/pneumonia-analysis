@@ -44,6 +44,7 @@ python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pne
 python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/efficientnet_b0" --epochs 5 --arch efficientnet_b0
 python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/resnet50" --epochs 5 --arch resnet50
 python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/mobilenet_v2" --epochs 5 --arch mobilenet_v2
+python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/mobilenet_v3" --epochs 5 --arch mobilenet_v3
 python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/vit_b_16" --epochs 5 --arch vit_b_16
 ```
 
@@ -51,7 +52,7 @@ python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pne
 ```bash
 python -m src.train_many --data_dir "$data_dir" --out_root "/content/drive/MyDrive/pneumonia_runs/archs" --epochs 5
 ```
-Default trains `resnet18,resnet50,densenet121,efficientnet_b0,mobilenet_v2,vit_b_16`.
+Default trains `resnet18,resnet50,densenet121,efficientnet_b0,mobilenet_v2,mobilenet_v3,vit_b_16`.
 
 ### Evaluate a single model
 ```bash
@@ -66,6 +67,7 @@ python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/dri
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v2/best_mobilenet_v2.pt,
+                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v3/best_mobilenet_v3.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/vit_b_16/best_vit_b_16.pt"   --weights uniform
 ```
 AUC-weighted average (uses validation AUC stored in each checkpoint):
@@ -75,6 +77,7 @@ python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/dri
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v2/best_mobilenet_v2.pt,
+                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v3/best_mobilenet_v3.pt,
                                                                     /content/drive/MyDrive/pneumonia_runs/archs/vit_b_16/best_vit_b_16.pt"   --weights auto_auc
 ```
 
@@ -83,7 +86,7 @@ python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/dri
 python -m src.gradcam --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt" --image_path "/content/drive/MyDrive/Chest_xray/Pneumonia/person1413_virus_2423.jpg" --out_path "/content/gradcam_resnet18.png"
 ```
 
-*Grad-CAM currently supports CNN backbones (ResNet/DenseNet/EfficientNet/MobileNet) but not ViT.*
+*Grad-CAM currently supports CNN backbones (ResNet, DenseNet, EfficientNet, MobileNet V2/V3) but not ViT.*
 
 **Notes**
 - Uses **ImageNet normalization** consistently across train/eval/Grad-CAM.

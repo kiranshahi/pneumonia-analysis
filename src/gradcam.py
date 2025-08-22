@@ -85,6 +85,8 @@ def main():
         target_layer = model.backbone.features.denseblock4.denselayer16.conv2
     elif arch == "mobilenet_v2":
         target_layer = model.backbone.features[-1][0]
+    elif arch == "mobilenet_v3":
+        target_layer = model.backbone.features[-1][0]
     elif arch == "efficientnet_b0":
         target_layer = model.backbone.features[-1][0]
     elif arch == "vit_b_16":

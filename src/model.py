@@ -7,6 +7,7 @@ from torchvision.models import (
     efficientnet_b0, EfficientNet_B0_Weights,
     resnet50, ResNet50_Weights,
     mobilenet_v2, MobileNet_V2_Weights,
+    mobilenet_v3_large, MobileNet_V3_Large_Weights,
     vit_b_16, ViT_B_16_Weights,
 )
 
@@ -35,6 +36,11 @@ def _make_backbone(arch: str, pretrained: bool = True):
     elif arch == "mobilenet_v2":
         weights = MobileNet_V2_Weights.DEFAULT if pretrained else None
         backbone = mobilenet_v2(weights=weights)
+        in_features = backbone.classifier[-1].in_features
+        head_attr = "classifier_seq"
+    elif arch == "mobilenet_v3":
+        weights = MobileNet_V3_Large_Weights.DEFAULT if pretrained else None
+        backbone = mobilenet_v3_large(weights=weights)
         in_features = backbone.classifier[-1].in_features
         head_attr = "classifier_seq"
     elif arch == "vit_b_16":
