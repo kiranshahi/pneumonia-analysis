@@ -57,16 +57,29 @@ class PneumoniaNet(nn.Module):
         super().__init__()
         self.arch = arch
         self.backbone, in_features, head_attr = _make_backbone(arch, pretrained=pretrained)
+        
+        head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(in_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(512, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(128, num_classes)
+        )
+
         if head_attr == "fc":
-            self.backbone.fc = nn.Linear(in_features, num_classes)
+            self.backbone.fc = head
         elif head_attr == "classifier":
-            self.backbone.classifier = nn.Linear(in_features, num_classes)
+            self.backbone.classifier = head
         elif head_attr == "classifier_seq":
             layers = list(self.backbone.classifier.children())
-            layers[-1] = nn.Linear(in_features, num_classes)
+            layers[-1] = head
             self.backbone.classifier = nn.Sequential(*layers)
         elif head_attr == "vit_head":
-            self.backbone.heads.head = nn.Linear(in_features, num_classes)
+            self.backbone.heads.head = head
         else:
             raise ValueError(f"Unknown head_attr: {head_attr}")
 
