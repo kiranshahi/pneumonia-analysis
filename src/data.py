@@ -20,7 +20,7 @@ AUG_POLICIES = {
 }
 
 class AlbumentationsTransform:
-    """Convert PIL image → repeated grayscale → Albumentations → tensor."""
+    """Convert PIL image > repeated grayscale > Albumentations → tensor."""
     def __init__(self, aug):
         self.aug = aug
 
@@ -60,7 +60,7 @@ def get_train_transform(img_size: int = 224, policy: str = "light", elastic: boo
             A.Resize(img_size, img_size),
             A.HorizontalFlip(p=0.5),
             A.Rotate(limit=15, p=probs["rotate"]),
-            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=0, p=probs["shift_scale"]),
+            A.Affine(translate_percent=(-0.05, 0.05), scale=(0.9, 1.1), rotate=0, p=probs["shift_scale"]),
             A.RandomBrightnessContrast(p=probs["brightness_contrast"]),
             A.CLAHE(p=probs["clahe"]),
             A.RandomGamma(p=probs["gamma"]),
@@ -128,8 +128,7 @@ def split_by_patient(dataset: datasets.ImageFolder, ratios=(0.7, 0.15, 0.15), se
     }
 
 def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_size: int = 224, seed: int = 42, aug: str = "light"):
-      """Create ``DataLoader`` objects for train/val/test splits."""
-      
+    """Create ``DataLoader`` objects for train/val/test splits."""
     if aug != "none" and aug not in AUG_POLICIES:
         raise ValueError(f"Unknown augmentation policy '{aug}'. Available options: {list(AUG_POLICIES.keys())} or 'none'.")
 
