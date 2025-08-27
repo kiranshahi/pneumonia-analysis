@@ -46,36 +46,32 @@ class TransformDataset(torch.utils.data.Dataset):
         return self.transform(img), label
 
 def get_train_transform(img_size: int = 224, policy: str = "light", elastic: bool = False):
-    """Create an albumentations transform for training data.
-        Parameters
-        ----------
-        img_size : int
-            Target size for ``Resize``.
-        policy : str, default "light"
-            Key in :data:`AUG_POLICIES` defining augmentation probabilities.
-        elastic : bool, default ``False``
-            Whether to include a light elastic deformation.
-    """
-    probs = AUG_POLICIES.get(policy)
+    """Create an albumentations transform for training data."""
+    
+    if policy == "none":
+        aug_list = [A.Resize(img_size, img_size)]
+    else:
+        if policy not in AUG_POLICIES:
+            raise KeyError(f"Unknown augmentation policy '{policy}'. Available options: {list(AUG_POLICIES.keys())} or 'none'.")
 
-    aug_list = [
-        A.Resize(img_size, img_size),
-        A.HorizontalFlip(p=0.5),
-        A.Rotate(limit=15, p=probs["rotate"]),
-        A.ShiftScaleRotate(
-            shift_limit=0.05, scale_limit=0.1, rotate_limit=0, p=probs["shift_scale"]
-        ),
-        A.RandomBrightnessContrast(p=probs["brightness_contrast"]),
-        A.CLAHE(p=probs["clahe"]),
-        A.RandomGamma(p=probs["gamma"]),
-        A.GaussNoise(p=probs["noise"]),
-        A.MotionBlur(p=probs["motion_blur"]),
-        A.MedianBlur(blur_limit=3, p=probs["median_blur"]),
-        A.CoarseDropout(p=probs["dropout"]),
-    ]
+        probs = AUG_POLICIES.get(policy)
 
-    if elastic:
-        aug_list.append(A.ElasticTransform(p=0.1))
+        aug_list = [
+            A.Resize(img_size, img_size),
+            A.HorizontalFlip(p=0.5),
+            A.Rotate(limit=15, p=probs["rotate"]),
+            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=0, p=probs["shift_scale"]),
+            A.RandomBrightnessContrast(p=probs["brightness_contrast"]),
+            A.CLAHE(p=probs["clahe"]),
+            A.RandomGamma(p=probs["gamma"]),
+            A.GaussNoise(p=probs["noise"]),
+            A.MotionBlur(p=probs["motion_blur"]),
+            A.MedianBlur(blur_limit=3, p=probs["median_blur"]),
+            A.CoarseDropout(p=probs["dropout"]),
+        ]
+
+        if elastic:
+            aug_list.append(A.ElasticTransform(p=0.1))
 
     aug_list += [A.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD), ToTensorV2()]
     return A.Compose(aug_list)
@@ -132,17 +128,11 @@ def split_by_patient(dataset: datasets.ImageFolder, ratios=(0.7, 0.15, 0.15), se
     }
 
 def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_size: int = 224, seed: int = 42, aug: str = "light"):
-      """Create ``DataLoader`` objects for train/val/test splits.
+      """Create ``DataLoader`` objects for train/val/test splits."""
+      
+    if aug != "none" and aug not in AUG_POLICIES:
+        raise ValueError(f"Unknown augmentation policy '{aug}'. Available options: {list(AUG_POLICIES.keys())} or 'none'.")
 
-    Parameters
-    ----------
-    root_dir: str
-        Root directory containing the dataset structured as for
-        ``torchvision.datasets.ImageFolder``.
-    aug: str
-        Augmentation strength for the training split (``"none"``, ``"light"``,
-        or ``"heavy"``).
-    """
     # Load base dataset without transform, then split by patient
     base_ds = datasets.ImageFolder(root=root_dir)
     splits = split_by_patient(base_ds, seed=seed)
@@ -199,3 +189,4 @@ def make_sample_weights_from_counts(dataset, class_counts):
     counts = torch.as_tensor(class_counts, dtype=torch.float)
     weights = [1.0 / counts[label].item() for label in _iter_labels(dataset)]
     return torch.tensor(weights, dtype=torch.float)
+    
