@@ -9,7 +9,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.preprocessing import label_binarize
 
 from .data import (
     make_loaders,
@@ -40,11 +41,25 @@ def _eval_collect(model, loader, device, criterion):
     logits_all = torch.cat(logits_all)
     labels_all = torch.cat(labels_all)
     acc = (logits_all.argmax(1) == labels_all).float().mean().item()
-    auc = None
-    if logits_all.shape[1] == 2:
-        probs = torch.softmax(logits_all, dim=1).numpy()[:,1]
-        auc = roc_auc_score(labels_all.numpy(), probs)
-    return running_loss / n, acc, auc
+    auc = pr_auc = None
+    
+    probs = torch.softmax(logits_all, dim=1).numpy()
+    labels_np = labels_all.numpy()
+
+    if probs.shape[1] == 2:
+        auc = roc_auc_score(labels_np, probs[:, 1])
+        pr_auc = average_precision_score(labels_np, probs[:, 1])
+    else:
+        labels_bin = label_binarize(labels_np, classes=np.arange(probs.shape[1]))
+        auc = {
+            "micro": roc_auc_score(labels_np, probs, multi_class="ovr", average="micro"),
+            "macro": roc_auc_score(labels_np, probs, multi_class="ovr", average="macro"),
+        }
+        pr_auc = {
+            "micro": average_precision_score(labels_bin, probs, average="micro"),
+            "macro": average_precision_score(labels_bin, probs, average="macro"),
+        }
+    return running_loss / n, acc, auc, pr_auc
 
 def train_one_epoch(model, loader, device, criterion, optimizer):
     model.train()
@@ -142,10 +157,24 @@ def main():
 
     for epoch in range(1, args.epochs+1):
         tr_loss, tr_acc = train_one_epoch(model, loaders["train"], device, criterion, optimizer)
-        va_loss, va_acc, va_auc = _eval_collect(model, loaders["val"], device, criterion)
+        va_loss, va_acc, va_auc, va_pr_auc = _eval_collect(model, loaders["val"], device, criterion)
         history["train"].append({"epoch": epoch, "loss": tr_loss, "acc": tr_acc})
-        history["val"].append({"epoch": epoch, "loss": va_loss, "acc": va_acc, "auc": va_auc})
-        print(f"Epoch {epoch}: train loss {tr_loss:.4f} acc {tr_acc:.4f} | val loss {va_loss:.4f} acc {va_acc:.4f} auc {va_auc if va_auc is not None else 'NA'}")
+        history["val"].append({"epoch": epoch, "loss": va_loss, "acc": va_acc, "auc": va_auc, "pr_auc": va_pr_auc})
+
+        if isinstance(va_auc, dict):
+            auc_str = f"micro={va_auc['micro']:.4f} macro={va_auc['macro']:.4f}"
+        else:
+            auc_str = f"{va_auc:.4f}" if va_auc is not None else "NA"
+
+        if isinstance(va_pr_auc, dict):
+            pr_auc_str = f"micro={va_pr_auc['micro']:.4f} macro={va_pr_auc['macro']:.4f}"
+        else:
+            pr_auc_str = f"{va_pr_auc:.4f}" if va_pr_auc is not None else "NA"
+
+        print(
+            f"Epoch {epoch}: train loss {tr_loss:.4f} acc {tr_acc:.4f} | val loss {va_loss:.4f} acc {va_acc:.4f}"
+            f"roc_auc {auc_str} pr_auc {pr_auc_str}"
+        )
         if va_acc > best_val_acc:
             best_val_acc = va_acc
             torch.save({
@@ -154,7 +183,8 @@ def main():
                 "img_size": args.img_size,
                 "arch": args.arch,
                 "val_acc": va_acc,
-                "val_auc": va_auc
+                "val_auc": va_auc,
+                "val_pr_auc": va_pr_auc,
             }, best_path)
 
     with open(Path(args.out_dir)/f"history_{args.arch}.json", "w") as f:
