@@ -116,11 +116,7 @@ def main():
             pin_memory=True,
         )
 
-    model = create_model(
-        num_classes=len(class_to_idx),
-        arch=args.arch,
-        pretrained=not args.no_pretrained,
-    ).to(device)
+    model = create_model(num_classes=len(class_to_idx), arch=args.arch, pretrained=not args.no_pretrained).to(device)
 
     class_weights = None
     alpha = None
@@ -138,12 +134,10 @@ def main():
         criterion = nn.CrossEntropyLoss()
 
 
-    model = create_model(num_classes=len(class_to_idx), arch=args.arch, pretrained=not args.no_pretrained).to(device)
-    criterion = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     imbalance_summary = {
-        "balance": args.balance,
+        "strategy": args.balance,
         "loss": args.loss,
         "class_counts": class_counts.tolist(),
         "class_weights": class_weights.tolist() if class_weights is not None else None,
