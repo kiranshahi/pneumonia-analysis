@@ -162,10 +162,8 @@ def main():
         else:
             pr_auc_str = f"{va_pr_auc:.4f}" if va_pr_auc is not None else "NA"
 
-        print(
-            f"Epoch {epoch}: train loss {tr_loss:.4f} acc {tr_acc:.4f} | val loss {va_loss:.4f} acc {va_acc:.4f}"
-            f"roc_auc {auc_str} pr_auc {pr_auc_str}"
-        )
+        print(f"Epoch {epoch}: train loss {tr_loss:.4f} acc {tr_acc:.4f} | val loss {va_loss:.4f} acc {va_acc:.4f} roc_auc {auc_str} pr_auc {pr_auc_str}")
+        
         if va_acc > best_val_acc:
             best_val_acc = va_acc
             torch.save({
