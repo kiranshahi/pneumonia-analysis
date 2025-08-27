@@ -9,6 +9,15 @@ from torchvision import datasets, transforms
 
 from .utils import IMAGENET_MEAN, IMAGENET_STD
 
+__all__ = [
+    "default_transform",
+    "infer_patient_id",
+    "split_by_patient",
+    "make_loaders",
+    "compute_class_counts",
+    "make_sample_weights_from_counts",
+]
+
 def default_transform(img_size: int = 224):
     return transforms.Compose([
         transforms.Resize((img_size, img_size)),
@@ -61,3 +70,39 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
     }
     class_to_idx = ds.class_to_idx
     return loaders, class_to_idx
+
+def _iter_labels(dataset):
+    """Yield labels from dataset, supporting ``torch.utils.data.Subset``."""
+    if isinstance(dataset, Subset):
+        for idx in dataset.indices:
+            # Access underlying dataset directly to avoid double wrapping
+            _, label = dataset.dataset[idx]
+            yield label
+    else:
+        for _, label in dataset:
+            yield label
+
+
+def compute_class_counts(dataset):
+    """Compute the number of samples per class in ``dataset``.
+
+    Handles ``torch.utils.data.Subset`` instances and returns a tensor of
+    shape ``[num_classes]`` with the counts for each class.
+    """
+    # Determine number of classes from the underlying dataset
+    base = dataset.dataset if isinstance(dataset, Subset) else dataset
+    num_classes = len(getattr(base, "classes"))
+    counts = torch.zeros(num_classes, dtype=torch.long)
+    for label in _iter_labels(dataset):
+        counts[label] += 1
+    return counts
+
+
+def make_sample_weights_from_counts(dataset, class_counts):
+    """Generate per-sample weights inversely proportional to ``class_counts``.
+
+    Each sample receives a weight of ``1 / class_counts[label]``.
+    """
+    counts = torch.as_tensor(class_counts, dtype=torch.float)
+    weights = [1.0 / counts[label].item() for label in _iter_labels(dataset)]
+    return torch.tensor(weights, dtype=torch.float)
