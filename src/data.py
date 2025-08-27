@@ -45,30 +45,51 @@ class TransformDataset(torch.utils.data.Dataset):
         img, label = self.subset[idx]
         return self.transform(img), label
 
-def get_train_transform(img_size: int = 224, policy: str = "light"):
-    """Create an albumentations transform for training data."""
+def get_train_transform(img_size: int = 224, policy: str = "light", elastic: bool = False):
+    """Create an albumentations transform for training data.
+        Parameters
+        ----------
+        img_size : int
+            Target size for ``Resize``.
+        policy : str, default "light"
+            Key in :data:`AUG_POLICIES` defining augmentation probabilities.
+        elastic : bool, default ``False``
+            Whether to include a light elastic deformation.
+    """
+    probs = AUG_POLICIES.get(policy)
 
-    aug_list = [A.Resize(img_size, img_size)]
-    if policy == "light":
-        aug_list += [A.HorizontalFlip(p=0.5)]
-    elif policy == "heavy":
-        aug_list += [A.HorizontalFlip(p=0.5), A.RandomBrightnessContrast(p=0.5)]
-    elif policy == "none":
-        pass
-    else:
-        raise ValueError(f"Unknown augmentation policy: {policy}")
+    aug_list = [
+        A.Resize(img_size, img_size),
+        A.HorizontalFlip(p=0.5),
+        A.Rotate(limit=15, p=probs["rotate"]),
+        A.ShiftScaleRotate(
+            shift_limit=0.05, scale_limit=0.1, rotate_limit=0, p=probs["shift_scale"]
+        ),
+        A.RandomBrightnessContrast(p=probs["brightness_contrast"]),
+        A.CLAHE(p=probs["clahe"]),
+        A.RandomGamma(p=probs["gamma"]),
+        A.GaussNoise(p=probs["noise"]),
+        A.MotionBlur(p=probs["motion_blur"]),
+        A.MedianBlur(blur_limit=3, p=probs["median_blur"]),
+        A.CoarseDropout(p=probs["dropout"]),
+    ]
+
+    if elastic:
+        aug_list.append(A.ElasticTransform(p=0.1))
 
     aug_list += [A.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD), ToTensorV2()]
     return A.Compose(aug_list)
 
 
 def get_val_test_transform(img_size: int = 224):
-    """Validation and test transforms (no augmentation)."""
+    """Validation and test transforms - resize and normalize."""
 
     return A.Compose([A.Resize(img_size, img_size), A.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),ToTensorV2()])
 
 
 __all__ = [
+    "get_train_transform",
+    "get_val_test_transform",
     "default_transform",
     "infer_patient_id",
     "split_by_patient",
