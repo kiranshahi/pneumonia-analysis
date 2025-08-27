@@ -145,7 +145,7 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
     """
     # Load base dataset without transform, then split by patient
     base_ds = datasets.ImageFolder(root=root_dir)
-    splits = split_by_patient(ds, seed=seed)
+    splits = split_by_patient(base_ds, seed=seed)
 
     # Prepare transforms
     train_tf = AlbumentationsTransform(get_train_transform(img_size=img_size, policy=aug))
@@ -158,7 +158,7 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
 
     loaders = {
         k: DataLoader(wrapped[k], batch_size=batch_size, shuffle=(k=='train'), num_workers=num_workers, pin_memory=True)
-        for k, v in wrapped
+        for k, v in wrapped.items()
     }
 
     class_to_idx = base_ds.class_to_idx
