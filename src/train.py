@@ -6,13 +6,23 @@ import json
 import torch
 import torch.nn as nn
 from torch.optim import Adam
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-from .data import make_loaders
+from .data import (
+    make_loaders,
+    compute_class_counts,
+    make_sample_weights_from_counts
+)
 from .model import create_model
-from .utils import set_seed
+from .utils import (
+    set_seed,
+    class_weights_from_counts,
+    FocalLoss,
+    focal_alpha_from_counts,
+    )
 
 def _eval_collect(model, loader, device, criterion):
     model.eval()
@@ -63,6 +73,10 @@ def main():
     parser.add_argument("--no_pretrained", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--arch", type=str, default="resnet18", choices=["resnet18","densenet121","efficientnet_b0","resnet50","mobilenet_v2","vit_b_16"])
+    parser.add_argument("--balance", type=str, choices=["none", "sampler", "class_weights"], default="none")
+    parser.add_argument("--loss", type=str, choices=["ce", "ce_weighted", "focal"], default="ce")
+    parser.add_argument("--focal-gamma", type=float, default=2.0)
+    parser.add_argument("--alpha-mode", type=str, choices=["none", "inv_freq"], default="none")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -70,13 +84,61 @@ def main():
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
 
     loaders, class_to_idx = make_loaders(args.data_dir, batch_size=args.batch_size, img_size=args.img_size, seed=args.seed)
+    
+    class_counts = compute_class_counts(loaders["train"].dataset)
+    print(f"Class counts: {class_counts.tolist()}")
+    
+    if args.balance == "sampler":
+        sample_weights = make_sample_weights_from_counts(
+            loaders["train"].dataset, class_counts
+        )
+        sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+        loaders["train"] = DataLoader(
+            loaders["train"].dataset,
+            batch_size=args.batch_size,
+            sampler=sampler,
+            num_workers=loaders["train"].num_workers,
+            pin_memory=True,
+        )
+
+    model = create_model(
+        num_classes=len(class_to_idx),
+        arch=args.arch,
+        pretrained=not args.no_pretrained,
+    ).to(device)
+
+    class_weights = None
+    alpha = None
+    if args.loss == "focal":
+        alpha = (
+            focal_alpha_from_counts(class_counts)
+            if args.alpha_mode == "inv_freq"
+            else None
+        )
+        criterion = FocalLoss(gamma=args.focal_gamma, alpha=alpha).to(device)
+    elif args.loss == "ce_weighted" or args.balance == "class_weights":
+        class_weights = class_weights_from_counts(class_counts).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        criterion = nn.CrossEntropyLoss()
+
+
     model = create_model(num_classes=len(class_to_idx), arch=args.arch, pretrained=not args.no_pretrained).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
+    imbalance_summary = {
+        "balance": args.balance,
+        "loss": args.loss,
+        "class_counts": class_counts.tolist(),
+        "class_weights": class_weights.tolist() if class_weights is not None else None,
+        "focal_alpha": alpha.tolist() if alpha is not None else None,
+    }
+    print(f"Imbalance summary: {imbalance_summary}")
+
     best_val_acc = 0.0
     best_path = str(Path(args.out_dir) / f"best_{args.arch}.pt")
-    history = {"train": [], "val": []}
+    history = {"train": [], "val": [], "imbalance": imbalance_summary}
 
     for epoch in range(1, args.epochs+1):
         tr_loss, tr_acc = train_one_epoch(model, loaders["train"], device, criterion, optimizer)
