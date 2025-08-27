@@ -6,7 +6,7 @@ import random
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
-from torchvision import datasets, transforms
+from torchvision import datasets
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -90,21 +90,12 @@ def get_val_test_transform(img_size: int = 224):
 __all__ = [
     "get_train_transform",
     "get_val_test_transform",
-    "default_transform",
     "infer_patient_id",
     "split_by_patient",
     "make_loaders",
     "compute_class_counts",
     "make_sample_weights_from_counts",
 ]
-
-def default_transform(img_size: int = 224):
-    return transforms.Compose([
-        transforms.Resize((img_size, img_size)),
-        transforms.Grayscale(num_output_channels=3),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-    ])
 
 def infer_patient_id(name: str) -> str:
     base = Path(name).name
