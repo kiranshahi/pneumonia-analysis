@@ -87,7 +87,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--no_pretrained", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
-    parser.add_argument("--arch", type=str, default="resnet18", choices=["resnet18","densenet121","efficientnet_b0","resnet50","mobilenet_v2","vit_b_16"])
+    parser.add_argument("--arch", type=str, default="resnet18", choices=["resnet18","densenet121","efficientnet_b0","resnet50","mobilenet_v2","mobilenet_v3","vit_b_16"])
     parser.add_argument("--balance", type=str, choices=["none", "sampler", "class_weights"], default="none")
     parser.add_argument("--loss", type=str, choices=["ce", "ce_weighted", "focal"], default="ce")
     parser.add_argument("--focal-gamma", type=float, default=2.0)
