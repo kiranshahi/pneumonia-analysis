@@ -101,7 +101,7 @@ def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
 
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
     heatmap = cv2.applyColorMap((cam*255).astype(np.uint8), cv2.COLORMAP_JET)
-
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
     overlay = (alpha * heatmap + (1 - alpha) * orig_img_bgr).astype(np.uint8)
 
     return overlay
