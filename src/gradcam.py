@@ -12,12 +12,13 @@ from .model import create_model
 from .utils import IMAGENET_MEAN, IMAGENET_STD, load_checkpoint
 
 def _focus_heatmap(cam: np.ndarray, sigma: int = 12) -> np.ndarray:
-    """Sharpen heatmap around its maximum activation.
+    """Sharpen an unnormalized heatmap around its maximum activation.
 
     Grad-CAM can produce very diffuse maps which are hard to interpret for
     X-ray images. To emphasise the most discriminative region we centre a
     Gaussian filter on the maximum activation. A smaller ``sigma`` results in
-    a more localised peak.
+    a more localised peak. This function assumes the input heatmap is
+    unnormalized and leaves any normalization to the caller.
 
     Args:
         cam: 2D heatmap array.
@@ -47,6 +48,21 @@ def preprocess(img_path: str, img_size: int = 224):
     return tfm(img).unsqueeze(0), np.array(img)
 
 def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
+    """Generate a Grad-CAM heatmap for a single image.
+
+    The returned heatmap is **unnormalized**; callers should perform any
+    desired normalization before visualisation.
+
+    Args:
+        model: Network used to compute activations.
+        img_tensor: Preprocessed input image tensor of shape ``[1, C, H, W]``.
+        target_layer: Layer from which to extract activations and gradients.
+        focus_sigma: Sigma value for :func:`_focus_heatmap`.
+
+    Returns:
+        Tuple of ``(heatmap, pred_class)`` where ``heatmap`` is an unnormalized
+        ``H x W`` array and ``pred_class`` is the predicted class index.
+    """
     activations = []
     gradients = []
 
@@ -73,7 +89,6 @@ def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
     cam = (weights * act).sum(dim=1, keepdim=False)  # [1, H, W]
     cam = F.relu(cam)[0].cpu().numpy()
     cam = _focus_heatmap(cam, sigma=focus_sigma)
-    cam = (cam - cam.min()) / (cam.max() + 1e-8)
     return cam, pred_class
 
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
@@ -122,6 +137,7 @@ def main():
         raise ValueError(f"Unknown arch for Grad-CAM: {arch}")
 
     cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer, focus_sigma=args.focus_sigma)
+    cam = (cam - cam.min()) / (cam.max() + 1e-8)
     orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
     overlay = overlay_heatmap(orig_bgr, cam)
     cv2.imwrite(args.out_path, overlay)
