@@ -92,7 +92,10 @@ def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
     grad = gradients[0]           # [1, C, H, W]
     weights = grad.mean(dim=(2,3), keepdim=True)   # [1, C, 1, 1]
     cam = (weights * act).sum(dim=1, keepdim=False)  # [1, H, W]
-    cam = F.relu(cam)[0].cpu().numpy()
+
+    cam = F.relu(cam)
+    cam = F.interpolate(cam.unsqueeze(1), size=img_tensor.shape[-2:], mode="bilinear", align_corners=False,)[0, 0]
+    cam = cam.cpu().numpy()
     cam = _focus_heatmap(cam, sigma=focus_sigma)
     return cam, pred_class
 
@@ -100,10 +103,8 @@ def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
     heatmap = cv2.applyColorMap((cam*255).astype(np.uint8), cv2.COLORMAP_JET)
     heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
 
-    heatmap = cv2.resize(heatmap, (orig_img_bgr.shape[1], orig_img_bgr.shape[0]))
     overlay = (alpha * heatmap + (1 - alpha) * orig_img_bgr).astype(np.uint8)
 
-    # overlay = (alpha*heatmap + (1-alpha)*orig_img_bgr).astype(np.uint8)
     return overlay
 
 def main():
@@ -142,7 +143,10 @@ def main():
         raise ValueError(f"Unknown arch for Grad-CAM: {arch}")
 
     cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer, focus_sigma=args.focus_sigma)
+    
     orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
+    orig_bgr = cv2.resize(orig_bgr, (cam.shape[1], cam.shape[0]))
+    
     overlay = overlay_heatmap(orig_bgr, cam)
     cv2.imwrite(args.out_path, overlay)
     print(f"Saved Grad-CAM to {args.out_path}. Pred class id: {pred_class}")
