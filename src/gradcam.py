@@ -15,12 +15,12 @@ def _focus_heatmap(cam: np.ndarray, sigma: int = 12) -> np.ndarray:
     """Sharpen heatmap around its maximum activation.
 
     Grad-CAM can produce very diffuse maps which are hard to interpret for
-    X-ray images.  To emphasise the most discriminative region we centre a
-    Gaussian filter on the maximum activation and renormalise the heatmap.  A
-    smaller ``sigma`` results in a more localised peak.
+    X-ray images. To emphasise the most discriminative region we centre a
+    Gaussian filter on the maximum activation. A smaller ``sigma`` results in
+    a more localised peak.
 
     Args:
-        cam: 2D heatmap array in the range [0, 1].
+        cam: 2D heatmap array.
         sigma: Standard deviation for the Gaussian kernel.
 
     Returns:
@@ -34,7 +34,6 @@ def _focus_heatmap(cam: np.ndarray, sigma: int = 12) -> np.ndarray:
     gaussian = np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * sigma ** 2))
     gaussian /= gaussian.max()
     cam = cam * gaussian
-    cam = (cam - cam.min()) / (cam.max() + 1e-8)
     return cam
 
 def preprocess(img_path: str, img_size: int = 224):
@@ -73,8 +72,8 @@ def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
     weights = grad.mean(dim=(2,3), keepdim=True)   # [1, C, 1, 1]
     cam = (weights * act).sum(dim=1, keepdim=False)  # [1, H, W]
     cam = F.relu(cam)[0].cpu().numpy()
-    cam = (cam - cam.min()) / (cam.max() + 1e-8)
     cam = _focus_heatmap(cam, sigma=focus_sigma)
+    cam = (cam - cam.min()) / (cam.max() + 1e-8)
     return cam, pred_class
 
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
