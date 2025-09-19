@@ -1,7 +1,9 @@
 
 import argparse
+import types
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
@@ -106,6 +108,23 @@ def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
 
     return overlay
 
+def disable_inplace_relu(m: nn.Module):
+    for child in m.children():
+        if isinstance(child, nn.ReLU):
+            child.inplace = False
+        disable_inplace_relu(child)
+
+
+
+
+def patch_densenet_forward(model):
+    def _densenet_forward_no_inplace(self, x):
+        features = self.backbone.features(x)
+        out = F.relu(features, inplace=False) # patched to avoid inplace
+        out = F.adaptive_avg_pool2d(out, (1, 1)).reshape(out.size(0), -1)
+        return self.backbone.classifier(out)
+    model.forward = types.MethodType(_densenet_forward_no_inplace, model)
+
 def main():
     parser = argparse.ArgumentParser(description="Grad-CAM visualization")
     parser.add_argument("--checkpoint", type=str, required=True)
@@ -121,15 +140,19 @@ def main():
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
+    disable_inplace_relu(model)
+    if args.arch.startswith("densenet"):
+        patch_densenet_forward(model)
+
     x, orig = preprocess(args.image_path, img_size=ckpt.get("img_size", args.img_size))
-    # pick a last conv/transformer layer based on arch
+    # last conv/transformer layer based on arch for grad cam
     target_layer = None
     if arch == "resnet18":
         target_layer = model.backbone.layer4[-1]
     elif arch == "resnet50":
         target_layer = model.backbone.layer4[-1]
     elif arch == "densenet121":
-        target_layer = model.backbone.features.norm5
+        target_layer = model.backbone.features.denseblock4
     elif arch == "mobilenet_v2":
         target_layer = model.backbone.features[-1]
     elif arch == "mobilenet_v3":
