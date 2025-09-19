@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--archs", type=str, default=",".join(ARCHS))
     parser.add_argument("--no_pretrained", action="store_true")
+    parser.add_argument("--patience", type=int, default=0)
     args = parser.parse_args()
 
     archs = [a.strip() for a in args.archs.split(",") if a.strip()]
@@ -43,6 +44,7 @@ def main():
             "--weight_decay", str(args.weight_decay),
             "--seed", str(args.seed),
             "--img_size", str(args.img_size),
+            "--patience", str(args.patience),
             "--arch", arch
         ]
         if args.no_pretrained:

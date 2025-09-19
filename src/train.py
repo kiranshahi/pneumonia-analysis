@@ -77,6 +77,7 @@ def main():
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--out_dir", type=str, required=True)
     parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--patience", type=int, default=0, help="Number of epochs with no validation accuracy improvement before early stopping. 0 disables early stopping.",)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
@@ -90,6 +91,8 @@ def main():
     parser.add_argument("--alpha-mode", type=str, choices=["none", "inv_freq"], default="none")
     parser.add_argument("--aug", type=str, default="light", choices=["none", "light", "medium", "strong"], help="data augmentation policy")
     args = parser.parse_args()
+
+    patience = max(args.patience, 0)
 
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,7 +145,10 @@ def main():
     }
     print(f"Imbalance summary: {imbalance_summary}")
 
-    best_val_acc = 0.0
+    best_val_acc = None
+    best_epoch = None
+    epochs_without_improvement = 0
+    early_stop_epoch = None
     best_path = str(Path(args.out_dir) / f"best_{args.arch}.pt")
     history = {"train": [], "val": [], "imbalance": imbalance_summary}
 
@@ -164,8 +170,10 @@ def main():
 
         print(f"Epoch {epoch}: train loss {tr_loss:.4f} acc {tr_acc:.4f} | val loss {va_loss:.4f} acc {va_acc:.4f} roc_auc {auc_str} pr_auc {pr_auc_str}")
         
-        if va_acc > best_val_acc:
+        if best_val_acc is None or va_acc > best_val_acc:
             best_val_acc = va_acc
+            best_epoch = epoch
+            epochs_without_improvement = 0
             torch.save({
                 "model_state": model.state_dict(),
                 "class_to_idx": class_to_idx,
@@ -175,6 +183,13 @@ def main():
                 "val_auc": va_auc,
                 "val_pr_auc": va_pr_auc,
             }, best_path)
+        else:
+            if patience > 0:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= patience:
+                    early_stop_epoch = epoch
+                    print(f"No improvement in val acc for {patience} epoch(s). Early stopping at epoch {epoch}.")
+                    break
 
     with open(Path(args.out_dir)/f"history_{args.arch}.json", "w") as f:
         json.dump(history, f, indent=2)
