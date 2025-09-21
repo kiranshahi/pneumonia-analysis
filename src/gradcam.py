@@ -132,16 +132,18 @@ def main():
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--out_path", type=str, default="gradcam_overlay.png")
     parser.add_argument("--focus_sigma", type=int, default=12, help="Standard deviation of Gaussian for focusing the heatmap")
+    parser.add_argument("--arch", type=str, required=True)
+    
     args = parser.parse_args()
 
     ckpt = load_checkpoint(args.checkpoint)
-    arch = ckpt.get("arch","resnet18")
+    arch = args.arch
     model = create_model(num_classes=len(ckpt.get("class_to_idx", {0:'Normal',1:'Pneumonia'})), arch=arch, pretrained=False)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
     disable_inplace_relu(model)
-    if args.arch.startswith("densenet"):
+    if arch.startswith("densenet"):
         patch_densenet_forward(model)
 
     x, orig = preprocess(args.image_path, img_size=ckpt.get("img_size", args.img_size))
