@@ -1,4 +1,3 @@
-
 import argparse
 import types
 
@@ -13,36 +12,6 @@ import cv2
 from .model import create_model
 from .utils import IMAGENET_MEAN, IMAGENET_STD, load_checkpoint
 
-def _focus_heatmap(cam: np.ndarray, sigma: int = 12) -> np.ndarray:
-    """Sharpen a heatmap around its maximum activation and normalise it.
-
-    Grad-CAM can produce very diffuse maps which are hard to interpret for
-    X-ray images. To emphasise the most discriminative region we centre a
-    Gaussian filter on the maximum activation. A smaller ``sigma`` results in
-    a more localised peak. Input heatmaps need not be pre-normalised; this
-    function applies a min–max normalisation after focusing.
-
-    Args:
-        cam: 2D heatmap array.
-        sigma: Standard deviation for the Gaussian kernel.
-
-    Returns:
-        A new heatmap focused around the peak location and min–max
-        normalised to ``[0, 1]``.
-    """
-
-    h, w = cam.shape
-    # Location of the highest response
-    y, x = np.unravel_index(cam.argmax(), cam.shape)
-    yy, xx = np.mgrid[:h, :w]
-    gaussian = np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * sigma ** 2))
-    gaussian /= gaussian.max()
-    cam = cam * gaussian
-    cam_min = cam.min()
-    cam_max = cam.max()
-    cam = (cam - cam_min) / (cam_max - cam_min + 1e-8)
-    return cam
-
 def preprocess(img_path: str, img_size: int = 224):
     tfm = transforms.Compose([
         transforms.Resize((img_size, img_size)),
@@ -53,17 +22,16 @@ def preprocess(img_path: str, img_size: int = 224):
     img = Image.open(img_path).convert("L").convert("RGB")
     return tfm(img).unsqueeze(0), np.array(img)
 
-def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
+def gradcam_on_image(model, img_tensor, target_layer):
     """Generate a Grad-CAM heatmap for a single image.
 
-    The returned heatmap is min–max normalised to ``[0, 1]`` for direct
+    The returned heatmap is min max normalised to ``[0, 1]`` for direct
     visualisation.
 
     Args:
         model: Network used to compute activations.
         img_tensor: Preprocessed input image tensor of shape ``[1, C, H, W]``.
         target_layer: Layer from which to extract activations and gradients.
-        focus_sigma: Sigma value for :func:`_focus_heatmap`.
 
     Returns:
         Tuple of ``(heatmap, pred_class)`` where ``heatmap`` is a normalised
@@ -96,9 +64,14 @@ def gradcam_on_image(model, img_tensor, target_layer, focus_sigma: int = 12):
     cam = (weights * act).sum(dim=1, keepdim=False)  # [1, H, W]
 
     cam = F.relu(cam)
-    cam = F.interpolate(cam.unsqueeze(1), size=img_tensor.shape[-2:], mode="bilinear", align_corners=False,)[0, 0]
+    cam = F.interpolate(cam.unsqueeze(1), size=img_tensor.shape[-2:], mode="bilinear", align_corners=False)[0, 0]
     cam = cam.cpu().numpy()
-    cam = _focus_heatmap(cam, sigma=focus_sigma)
+    cam_min = cam.min()
+    cam_max = cam.max()
+    if cam_max > cam_min:
+        cam = (cam - cam_min) / (cam_max - cam_min)
+    else:
+        cam = np.zeros_like(cam)
     return cam, pred_class
 
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
@@ -131,7 +104,6 @@ def main():
     parser.add_argument("--image_path", type=str, required=True)
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--out_path", type=str, default="gradcam_overlay.png")
-    parser.add_argument("--focus_sigma", type=int, default=12, help="Standard deviation of Gaussian for focusing the heatmap")
     parser.add_argument("--arch", type=str, required=True)
     
     args = parser.parse_args()
@@ -166,7 +138,7 @@ def main():
     else:
         raise ValueError(f"Unknown arch for Grad-CAM: {arch}")
 
-    cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer, focus_sigma=args.focus_sigma)
+    cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer)
     
     orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
     orig_bgr = cv2.resize(orig_bgr, (cam.shape[1], cam.shape[0]))
