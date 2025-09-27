@@ -43,6 +43,41 @@ class TransformDataset(torch.utils.data.Dataset):
         img, label = self.dataset[idx]
         return self.transform(img), label
 
+class RemapTargetsDataset(Dataset):
+    """Wrap a dataset and remap class indices to a canonical mapping."""
+
+    def __init__(self, dataset: Dataset, canonical: Dict[str, int]):
+        self.dataset = dataset
+        self._canonical = dict(canonical)
+
+        base = getattr(dataset, "dataset", dataset)
+        if not hasattr(base, "classes"):
+            raise AttributeError("Dataset must expose a 'classes' attribute for remapping.")
+        self._base_classes = base.classes
+
+        # Provide ``classes`` / ``class_to_idx`` consistent with the canonical mapping
+        self.class_to_idx = self._canonical
+        self.classes = [None] * len(self._canonical)
+        for cls_name, idx in self._canonical.items():
+            if idx >= len(self.classes):
+                raise ValueError("Canonical mapping must be zero-indexed and contiguous.")
+            self.classes[idx] = cls_name
+
+        if any(cls is None for cls in self.classes):
+            raise ValueError("Canonical mapping must cover a contiguous range starting at 0.")
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        img, label = self.dataset[idx]
+        cls_name = self._base_classes[label]
+        try:
+            remapped = self._canonical[cls_name]
+        except KeyError as exc:
+            raise KeyError(f"Class '{cls_name}' missing from canonical mapping.") from exc
+        return img, remapped
+
 def get_train_transform(img_size: int = 224, policy: str = "light", elastic: bool = False):
     """Create an albumentations transform for training data."""
     
@@ -88,6 +123,7 @@ __all__ = [
     "make_loaders",
     "compute_class_counts",
     "make_sample_weights_from_counts",
+    "RemapTargetsDataset",
 ]
 
 def infer_patient_id(name: str) -> str:
@@ -136,12 +172,12 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
     ds_train = datasets.ImageFolder(root / "train")
     ds_val   = datasets.ImageFolder(root / "val")
     ds_test  = datasets.ImageFolder(root / "test")
-
-    canonical = ds_train.class_to_idx
+    
+    canonical = dict(ds_train.class_to_idx)
     if ds_val.class_to_idx != canonical:
-        ds_val = TransformDataset(ds_val, canonical)
+        ds_val = RemapTargetsDataset(ds_val, canonical)
     if ds_test.class_to_idx != canonical:
-        ds_test = TransformDataset(ds_test, canonical)
+        ds_test = RemapTargetsDataset(ds_test, canonical)
 
     # 3) Wrap with your Albumentations pipelines
     train_tf = AlbumentationsTransform(get_train_transform(img_size=img_size, policy=aug))
