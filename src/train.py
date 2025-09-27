@@ -14,12 +14,7 @@ from sklearn.preprocessing import label_binarize
 
 from .data import (make_loaders, compute_class_counts, make_sample_weights_from_counts)
 from .model import create_model
-from .utils import (
-    set_seed,
-    class_weights_from_counts,
-    FocalLoss,
-    focal_alpha_from_counts,
-    )
+from .utils import (set_seed, class_weights_from_counts, FocalLoss, focal_alpha_from_counts)
 
 def _eval_collect(model, loader, device, criterion):
     model.eval()
@@ -89,7 +84,6 @@ def main():
     parser.add_argument("--loss", type=str, choices=["ce", "ce_weighted", "focal"], default="ce")
     parser.add_argument("--focal-gamma", type=float, default=2.0)
     parser.add_argument("--alpha-mode", type=str, choices=["none", "inv_freq"], default="none")
-    parser.add_argument("--aug", type=str, default="light", choices=["none", "light", "medium", "strong"], help="data augmentation policy")
     args = parser.parse_args()
 
     patience = max(args.patience, 0)
@@ -98,7 +92,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
 
-    loaders, class_to_idx = make_loaders(args.data_dir, batch_size=args.batch_size, img_size=args.img_size, seed=args.seed, aug= args.aug)
+    loaders, class_to_idx = make_loaders(args.data_dir, batch_size=args.batch_size, img_size=args.img_size, seed=args.seed)
     
     class_counts = compute_class_counts(loaders["train"].dataset)
     print(f"Class counts: {class_counts.tolist()}")

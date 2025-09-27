@@ -14,9 +14,7 @@ from albumentations.pytorch import ToTensorV2
 from .utils import IMAGENET_MEAN, IMAGENET_STD
 
 AUG_POLICIES = {
-    "light": dict(rotate=0.5, shift_scale=0.5, brightness_contrast=0.5, clahe=0.3, gamma=0.3, noise=0.2, motion_blur=0.1, median_blur=0.1, dropout=0.1),
-    "medium": dict(rotate=0.6, shift_scale=0.6, brightness_contrast=0.6, clahe=0.4, gamma=0.4, noise=0.3, motion_blur=0.15, median_blur=0.15, dropout=0.1),
-    "strong": dict(rotate=0.7, shift_scale=0.7, brightness_contrast=0.7, clahe=0.5, gamma=0.5, noise=0.4, motion_blur=0.2, median_blur=0.2, dropout=0.15),
+    "light": dict(rotate=0.5, shift_scale=0.5, brightness_contrast=0.5, clahe=0.3, gamma=0.3, noise=0.2, motion_blur=0.1, median_blur=0.1, dropout=0.1)
 }
 
 class AlbumentationsTransform:
@@ -58,7 +56,6 @@ def get_train_transform(img_size: int = 224, policy: str = "light", elastic: boo
 
         aug_list = [
             A.Resize(img_size, img_size),
-            A.HorizontalFlip(p=0.5),
             A.Rotate(limit=15, p=probs["rotate"]),
             A.Affine(translate_percent=(-0.05, 0.05), scale=(0.9, 1.1), rotate=0, p=probs["shift_scale"]),
             A.RandomBrightnessContrast(p=probs["brightness_contrast"]),
@@ -127,31 +124,35 @@ def split_by_patient(dataset: datasets.ImageFolder, ratios=(0.7, 0.15, 0.15), se
         "test": gather(test_patients),
     }
 
-def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_size: int = 224, seed: int = 42, aug: str = "light"):
-    """Create ``DataLoader`` objects for train/val/test splits."""
+def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_size: int = 224, seed: int = 42, aug: str = "light", pin_memory: bool = True):
     if aug != "none" and aug not in AUG_POLICIES:
         raise ValueError(f"Unknown augmentation policy '{aug}'. Available options: {list(AUG_POLICIES.keys())} or 'none'.")
+    
+    root = Path(root_dir)
+    for s in ("train", "val", "test"):
+        if not (root / s).exists():
+            raise FileNotFoundError(f"Expected '{s}' folder under {root}. Found only {list(p.name for p in root.iterdir())}")
+        
+    ds_train = datasets.ImageFolder(root / "train")
+    ds_val   = datasets.ImageFolder(root / "val")
+    ds_test  = datasets.ImageFolder(root / "test")
 
-    # Load base dataset without transform, then split by patient
-    base_ds = datasets.ImageFolder(root=root_dir)
-    splits = split_by_patient(base_ds, seed=seed)
+    canonical = ds_train.class_to_idx
+    if ds_val.class_to_idx != canonical:
+        ds_val = RemapTargetsDataset(ds_val, canonical)
+    if ds_test.class_to_idx != canonical:
+        ds_test = RemapTargetsDataset(ds_test, canonical)
 
-    # Prepare transforms
+    # 3) Wrap with your Albumentations pipelines
     train_tf = AlbumentationsTransform(get_train_transform(img_size=img_size, policy=aug))
+    eval_tf  = AlbumentationsTransform(get_val_test_transform(img_size=img_size))
 
-    eval_tf = AlbumentationsTransform(get_val_test_transform(img_size=img_size))
-    tforms = {"train": train_tf, "val": eval_tf, "test": eval_tf}
+    wrapped = { "train": TransformDataset(ds_train, train_tf), "val":   TransformDataset(ds_val,   eval_tf), "test":  TransformDataset(ds_test,  eval_tf)}
 
-    # Wrap subsets with transforms
-    wrapped = {k: TransformDataset(v, tforms[k]) for k, v in splits.items()}
-
-    loaders = {
-        k: DataLoader(wrapped[k], batch_size=batch_size, shuffle=(k=='train'), num_workers=num_workers, pin_memory=True)
-        for k, v in wrapped.items()
+    loaders = { k: DataLoader(wrapped[k], batch_size=batch_size, shuffle=(k == "train"), num_workers=num_workers, pin_memory=pin_memory)
+        for k in wrapped
     }
-
-    class_to_idx = base_ds.class_to_idx
-    return loaders, class_to_idx
+    return loaders, canonical
 
 def _iter_labels(dataset):
     """Yield labels from dataset, supporting ``torch.utils.data.Subset``."""
