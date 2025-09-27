@@ -32,7 +32,10 @@ class TransformDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, transform):
         self.dataset = dataset
         self.transform = transform
-        base = getattr(dataset, "dataset", dataset)
+        try:
+            base = dataset.dataset
+        except AttributeError:
+            base = dataset
         self.classes = base.classes
         self.class_to_idx = base.class_to_idx
 
@@ -50,7 +53,10 @@ class RemapTargetsDataset(Dataset):
         self.dataset = dataset
         self._canonical = dict(canonical)
 
-        base = getattr(dataset, "dataset", dataset)
+        try:
+            base = dataset.dataset
+        except AttributeError:
+            base = dataset
         if not hasattr(base, "classes"):
             raise AttributeError("Dataset must expose a 'classes' attribute for remapping.")
         self._base_classes = base.classes
