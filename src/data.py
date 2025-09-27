@@ -26,21 +26,21 @@ class AlbumentationsTransform:
         img = np.array(img.convert("L"))          # grayscale
         img = np.stack([img]*3, axis=-1)          # repeat channels
         return self.aug(image=img)["image"]
-
+    
 class TransformDataset(torch.utils.data.Dataset):
-    """Apply a transform to an existing Subset without altering it."""
-    def __init__(self, subset, transform):
-        self.subset = subset
+    """Apply a transform to an existing dataset or subset without altering it."""
+    def __init__(self, dataset, transform):
+        self.dataset = dataset
         self.transform = transform
-        base = subset.dataset
+        base = getattr(dataset, "dataset", dataset)
         self.classes = base.classes
         self.class_to_idx = base.class_to_idx
 
     def __len__(self):
-        return len(self.subset)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        img, label = self.subset[idx]
+        img, label = self.dataset[idx]
         return self.transform(img), label
 
 def get_train_transform(img_size: int = 224, policy: str = "light", elastic: bool = False):
@@ -139,9 +139,9 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
 
     canonical = ds_train.class_to_idx
     if ds_val.class_to_idx != canonical:
-        ds_val = RemapTargetsDataset(ds_val, canonical)
+        ds_val = TransformDataset(ds_val, canonical)
     if ds_test.class_to_idx != canonical:
-        ds_test = RemapTargetsDataset(ds_test, canonical)
+        ds_test = TransformDataset(ds_test, canonical)
 
     # 3) Wrap with your Albumentations pipelines
     train_tf = AlbumentationsTransform(get_train_transform(img_size=img_size, policy=aug))
