@@ -48,9 +48,10 @@ MAKE_FOLDERS_AND_COPY = True                # set True to copy files into train/
 # ====== HELPERS ======
 
 # Extract patient_id from filename/path
-# - Matches RSNA/Kermany-like: IM-0551-0001-0002.jpeg -> patient_id = IM-0551-0001
+# - Matches patient Id
 # - If no match, falls back to whole stem.
-PATTERN_RSNA = re.compile(r"^([A-Za-z]+-\d{4}-\d{4})", re.IGNORECASE)
+PATTERN_PNEUMONIA = re.compile(r"^(person\d+)", re.IGNORECASE)
+PATTERN_NORMAL = re.compile(r"^([A-Za-z]+-\d{4}-\d{4})", re.IGNORECASE)
 
 def get_stem(p):
     name = os.path.basename(str(p))
@@ -59,14 +60,15 @@ def get_stem(p):
 
 def infer_patient_id(path_or_name: str) -> str:
     stem = get_stem(path_or_name)
-    m = PATTERN_RSNA.match(stem)
+    m = PATTERN_PNEUMONIA.match(stem)
     if m:
-        return m.group(1).upper()  # normalize case
-    # Fallbacks: try the first 3 dash tokens
+        return m.group(1).upper()
+    m = PATTERN_NORMAL.match(stem)
+    if m:
+        return m.group(1).upper()
     parts = stem.split("-")
     if len(parts) >= 3:
         return "-".join(parts[:3]).upper()
-    # Last resort: whole stem
     return stem.upper()
 
 def normalize_label(x):
