@@ -191,7 +191,7 @@ def make_loaders(root_dir: str, batch_size: int = 32, num_workers: int = 2, img_
 
     wrapped = { "train": TransformDataset(ds_train, train_tf), "val":   TransformDataset(ds_val,   eval_tf), "test":  TransformDataset(ds_test,  eval_tf)}
 
-    loaders = { k: DataLoader(wrapped[k], batch_size=batch_size, shuffle=(k == "train"), num_workers=num_workers, pin_memory=pin_memory)
+    loaders = { k: DataLoader(wrapped[k], batch_size=batch_size, shuffle=(k == "train"), num_workers=num_workers, pin_memory=pin_memory, drop_last=(k == "train"))
         for k in wrapped
     }
     return loaders, canonical

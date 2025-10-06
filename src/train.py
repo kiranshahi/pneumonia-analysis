@@ -55,6 +55,7 @@ def _eval_collect(model, loader, device, criterion):
 def train_one_epoch(model, loader, device, criterion, optimizer):
     model.train()
     running_loss, running_acc = 0.0, 0.0
+    n_samples = 0
     for images, labels in tqdm(loader, desc="Train", leave=False):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
@@ -62,10 +63,13 @@ def train_one_epoch(model, loader, device, criterion, optimizer):
         loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
-        running_loss += loss.item() * images.size(0)
+        batch_size = images.size(0)
+        running_loss += loss.item() * batch_size
         running_acc += (logits.argmax(1) == labels).float().sum().item()
-    n = len(loader.dataset)
-    return running_loss / n, running_acc / n
+        n_samples += batch_size
+    if n_samples == 0:
+        raise ValueError("Train loader produced zero samples. Reduce batch size or disable drop_last.")
+    return running_loss / n_samples, running_acc / n_samples
 
 def main():
     parser = argparse.ArgumentParser(description="Train CNN for Pneumonia classification (multi-arch)")
@@ -108,6 +112,7 @@ def main():
             sampler=sampler,
             num_workers=loaders["train"].num_workers,
             pin_memory=True,
+            drop_last=True,
         )
 
     model = create_model(num_classes=len(class_to_idx), arch=args.arch, pretrained=not args.no_pretrained).to(device)
