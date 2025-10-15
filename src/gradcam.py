@@ -94,10 +94,25 @@ def vit_gradcam_on_image(model, img_tensor):
     # the classification head applies the ``cls`` token projection.
     target_module = model.backbone.encoder
 
-    def fwd_hook(module, inp, out):
-        activations.append(out)
-        out.register_hook(lambda grad: gradients.append(grad))
+    def _extract_tokens(output):
+        """Return the tensor of token embeddings from the encoder output."""
+        # ``torchvision`` 0.23 and newer wrap the encoder activations in an
+        # ``EncoderOutput`` object. Older versions return the raw tensor.  We
+        # need to support both so Grad-CAM works regardless of the installed
+        # torchvision version.
+        if hasattr(output, "last_hidden_state"):
+            return output.last_hidden_state
+        return output
 
+    def fwd_hook(module, inp, out):
+        tokens = _extract_tokens(out)
+        if not torch.is_tensor(tokens):
+            raise TypeError(
+                "Unexpected encoder output type for ViT Grad-CAM: "
+                f"{type(tokens)!r}"
+            )
+        activations.append(tokens)
+        tokens.register_hook(lambda grad: gradients.append(grad))
     h = target_module.register_forward_hook(fwd_hook)
 
     logits = model(img_tensor)
