@@ -84,6 +84,7 @@ def vit_gradcam_on_image(model, img_tensor):
     """
 
     device = next(model.parameters()).device
+    model = model.to(device)
     img_tensor = img_tensor.to(device)
 
     activations = []
@@ -94,13 +95,10 @@ def vit_gradcam_on_image(model, img_tensor):
     target_module = model.backbone.encoder
 
     def fwd_hook(module, inp, out):
-        activations.append(out.detach())
+        activations.append(out)
+        out.register_hook(lambda grad: gradients.append(grad))
 
-    def bwd_hook(module, grad_in, grad_out):
-        gradients.append(grad_out[0].detach())
-
-    h1 = target_module.register_forward_hook(fwd_hook)
-    h2 = target_module.register_full_backward_hook(bwd_hook)
+    h = target_module.register_forward_hook(fwd_hook)
 
     logits = model(img_tensor)
     pred_class = logits.argmax(1).item()
@@ -108,21 +106,22 @@ def vit_gradcam_on_image(model, img_tensor):
     model.zero_grad(set_to_none=True)
     score.backward()
 
-    h1.remove(); h2.remove()
+    h.remove()
 
     if not activations or not gradients:
         raise RuntimeError("Failed to capture ViT activations/gradients for Grad-CAM")
 
-    tokens = activations[0]   # [1, num_tokens, hidden_dim]
-    grads = gradients[0]      # [1, num_tokens, hidden_dim]
+    tokens = activations[0].detach()   # [1, num_tokens, hidden_dim]
+    grads = gradients[0].detach()      # [1, num_tokens, hidden_dim]
 
     # Remove the class token so we only keep spatial information.
     patch_tokens = tokens[:, 1:, :]
     patch_grads = grads[:, 1:, :]
 
-    # Global average pooling over the tokens gives the channel importance.
-    weights = patch_grads.mean(dim=1)  # [1, hidden_dim]
-    cam_tokens = torch.matmul(patch_tokens, weights.unsqueeze(-1)).squeeze(-1)
+    # Element-wise product between the gradients and activations mirrors the
+    # convolutional Grad-CAM formulation and emphasises patches that contribute
+    # positively to the prediction.
+    cam_tokens = (patch_grads * patch_tokens).sum(dim=-1)
     cam_tokens = cam_tokens.squeeze(0)  # [num_patches]
     cam_tokens = F.relu(cam_tokens)
 
