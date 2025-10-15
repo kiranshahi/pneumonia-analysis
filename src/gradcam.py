@@ -83,13 +83,15 @@ def vit_gradcam_on_image(model, img_tensor):
     transformer encoder are used to build a coarse localisation map.
     """
 
+    device = next(model.parameters()).device
+    img_tensor = img_tensor.to(device)
+
     activations = []
     gradients = []
 
-    # The LayerNorm after the final encoder block contains the patch tokens
-    # before they are fed into the classification head. Hooking here gives us a
-    # good representation for Grad-CAM.
-    target_module = model.backbone.encoder.ln
+    # Hook onto the full encoder so we capture the token sequence right before
+    # the classification head applies the ``cls`` token projection.
+    target_module = model.backbone.encoder
 
     def fwd_hook(module, inp, out):
         activations.append(out.detach())
@@ -108,6 +110,9 @@ def vit_gradcam_on_image(model, img_tensor):
 
     h1.remove(); h2.remove()
 
+    if not activations or not gradients:
+        raise RuntimeError("Failed to capture ViT activations/gradients for Grad-CAM")
+
     tokens = activations[0]   # [1, num_tokens, hidden_dim]
     grads = gradients[0]      # [1, num_tokens, hidden_dim]
 
@@ -116,22 +121,38 @@ def vit_gradcam_on_image(model, img_tensor):
     patch_grads = grads[:, 1:, :]
 
     # Global average pooling over the tokens gives the channel importance.
-    weights = patch_grads.mean(dim=1, keepdim=True)  # [1, 1, hidden_dim]
-    cam_tokens = (patch_tokens * weights).sum(dim=-1)  # [1, num_patches]
+    weights = patch_grads.mean(dim=1)  # [1, hidden_dim]
+    cam_tokens = torch.matmul(patch_tokens, weights.unsqueeze(-1)).squeeze(-1)
+    cam_tokens = cam_tokens.squeeze(0)  # [num_patches]
     cam_tokens = F.relu(cam_tokens)
 
     # Determine the patch grid size and reshape into a 2D map.
-    patch_size = model.backbone.patch_size
-    if isinstance(patch_size, int):
-        patch_h = patch_w = patch_size
-    else:
-        patch_h, patch_w = patch_size
+    num_patches = cam_tokens.numel()
 
-    grid_h = img_tensor.shape[-2] // patch_h
-    grid_w = img_tensor.shape[-1] // patch_w
+    # Try to infer a square grid from the token count, otherwise fall back to
+    # the ratio dictated by the patch embedding configuration.
+    grid_h = int(num_patches ** 0.5)
+    grid_w = grid_h
+    if grid_h * grid_w != num_patches:
+        patch_size = model.backbone.patch_size
+        if isinstance(patch_size, int):
+            patch_h = patch_w = patch_size
+        else:
+            patch_h, patch_w = patch_size
+        grid_h = img_tensor.shape[-2] // patch_h
+        grid_w = img_tensor.shape[-1] // patch_w
+        if grid_h * grid_w != num_patches:
+            raise RuntimeError(
+                f"Cannot reshape {num_patches} ViT tokens into a {grid_h}x{grid_w} grid"
+            )
 
     cam = cam_tokens.reshape(grid_h, grid_w)
-    cam = F.interpolate(cam.unsqueeze(0).unsqueeze(0), size=img_tensor.shape[-2:], mode="bilinear", align_corners=False)[0, 0]
+    cam = F.interpolate(
+        cam.unsqueeze(0).unsqueeze(0),
+        size=img_tensor.shape[-2:],
+        mode="bilinear",
+        align_corners=False,
+    )[0, 0]
     cam = cam.detach().cpu().numpy()
     cam_min = cam.min()
     cam_max = cam.max()
