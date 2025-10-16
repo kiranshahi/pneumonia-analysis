@@ -82,24 +82,17 @@ def vit_gradcam_on_image(model, img_tensor):
     the [CLS] token score with respect to the patch tokens at the output of the
     transformer encoder are used to build a coarse localisation map.
     """
-
+    
     device = next(model.parameters()).device
     model = model.to(device)
     img_tensor = img_tensor.to(device)
 
     activations = []
-    gradients = []
 
-    # Hook onto the full encoder so we capture the token sequence right before
-    # the classification head applies the ``cls`` token projection.
     target_module = model.backbone.encoder
 
     def _extract_tokens(output):
         """Return the tensor of token embeddings from the encoder output."""
-        # ``torchvision`` 0.23 and newer wrap the encoder activations in an
-        # ``EncoderOutput`` object. Older versions return the raw tensor.  We
-        # need to support both so Grad-CAM works regardless of the installed
-        # torchvision version.
         if hasattr(output, "last_hidden_state"):
             return output.last_hidden_state
         return output
@@ -108,43 +101,31 @@ def vit_gradcam_on_image(model, img_tensor):
         tokens = _extract_tokens(out)
         if not torch.is_tensor(tokens):
             raise TypeError(
-                "Unexpected encoder output type for ViT Grad-CAM: "
+                "Unexpected encoder output type for ViT activation map: "
                 f"{type(tokens)!r}"
             )
-        activations.append(tokens)
-        tokens.register_hook(lambda grad: gradients.append(grad))
+        activations.append(tokens.detach())
+
     h = target_module.register_forward_hook(fwd_hook)
 
-    logits = model(img_tensor)
-    pred_class = logits.argmax(1).item()
-    score = logits[0, pred_class]
-    model.zero_grad(set_to_none=True)
-    score.backward()
+    with torch.no_grad():
+        logits = model(img_tensor)
 
     h.remove()
 
-    if not activations or not gradients:
-        raise RuntimeError("Failed to capture ViT activations/gradients for Grad-CAM")
+    if not activations:
+        raise RuntimeError("Failed to capture ViT activations for activation map")
 
-    tokens = activations[0].detach()   # [1, num_tokens, hidden_dim]
-    grads = gradients[0].detach()      # [1, num_tokens, hidden_dim]
+    tokens = activations[0]            # [1, num_tokens, hidden_dim]
+    patch_tokens = tokens[:, 1:, :]    # Drop CLS token
 
-    # Remove the class token so we only keep spatial information.
-    patch_tokens = tokens[:, 1:, :]
-    patch_grads = grads[:, 1:, :]
-
-    # Element-wise product between the gradients and activations mirrors the
-    # convolutional Grad-CAM formulation and emphasises patches that contribute
-    # positively to the prediction.
-    cam_tokens = (patch_grads * patch_tokens).sum(dim=-1)
+    # Use the mean squared activation across the embedding dimension to obtain
+    # a non-negative importance score per patch.
+    cam_tokens = patch_tokens.pow(2).mean(dim=-1)
     cam_tokens = cam_tokens.squeeze(0)  # [num_patches]
-    cam_tokens = F.relu(cam_tokens)
 
-    # Determine the patch grid size and reshape into a 2D map.
     num_patches = cam_tokens.numel()
 
-    # Try to infer a square grid from the token count, otherwise fall back to
-    # the ratio dictated by the patch embedding configuration.
     grid_h = int(num_patches ** 0.5)
     grid_w = grid_h
     if grid_h * grid_w != num_patches:
@@ -174,6 +155,8 @@ def vit_gradcam_on_image(model, img_tensor):
         cam = (cam - cam_min) / (cam_max - cam_min)
     else:
         cam = np.zeros_like(cam)
+
+    pred_class = logits.argmax(1).item()
     return cam, pred_class
 
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
