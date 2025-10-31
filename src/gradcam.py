@@ -11,6 +11,7 @@ import cv2
 
 from .model import create_model
 from .utils import IMAGENET_MEAN, IMAGENET_STD, load_checkpoint
+from .gradcam_vit import VITGradCam
 
 def preprocess(img_path: str, img_size: int = 224):
     tfm = transforms.Compose([
@@ -23,27 +24,15 @@ def preprocess(img_path: str, img_size: int = 224):
     return tfm(img).unsqueeze(0), np.array(img)
 
 def gradcam_on_image(model, img_tensor, target_layer):
-    """Generate a Grad-CAM heatmap for a single image.
-
-    The returned heatmap is min max normalised to ``[0, 1]`` for direct
-    visualisation.
-
-    Args:
-        model: Network used to compute activations.
-        img_tensor: Preprocessed input image tensor of shape ``[1, C, H, W]``.
-        target_layer: Layer from which to extract activations and gradients.
-
-    Returns:
-        Tuple of ``(heatmap, pred_class)`` where ``heatmap`` is a normalised
-        ``H x W`` array and ``pred_class`` is the predicted class index.
-    """
 
     activations = []
     gradients = []
 
+    # Forward hook to store activation
     def fwd_hook(module, inp, out):
         activations.append(out.detach())
 
+    # backward hook to capture gradient
     def bwd_hook(module, grad_in, grad_out):
         gradients.append(grad_out[0].detach())
 
@@ -75,96 +64,10 @@ def gradcam_on_image(model, img_tensor, target_layer):
     return cam, pred_class
 
 
-def vit_gradcam_on_image(model, img_tensor):
-    """Grad-CAM implementation for Vision Transformers.
-
-    The approach follows the idea from ``TokenGradCAM`` where the gradients of
-    the [CLS] token score with respect to the patch tokens at the output of the
-    transformer encoder are used to build a coarse localisation map.
-    """
-    
-    device = next(model.parameters()).device
-    model = model.to(device)
-    img_tensor = img_tensor.to(device)
-
-    activations = []
-
-    target_module = model.backbone.encoder
-
-    def _extract_tokens(output):
-        """Return the tensor of token embeddings from the encoder output."""
-        if hasattr(output, "last_hidden_state"):
-            return output.last_hidden_state
-        return output
-
-    def fwd_hook(module, inp, out):
-        tokens = _extract_tokens(out)
-        if not torch.is_tensor(tokens):
-            raise TypeError(
-                "Unexpected encoder output type for ViT activation map: "
-                f"{type(tokens)!r}"
-            )
-        activations.append(tokens.detach())
-
-    h = target_module.register_forward_hook(fwd_hook)
-
-    with torch.no_grad():
-        logits = model(img_tensor)
-
-    h.remove()
-
-    if not activations:
-        raise RuntimeError("Failed to capture ViT activations for activation map")
-
-    tokens = activations[0]            # [1, num_tokens, hidden_dim]
-    patch_tokens = tokens[:, 1:, :]    # Drop CLS token
-
-    # Use the mean squared activation across the embedding dimension to obtain
-    # a non-negative importance score per patch.
-    cam_tokens = patch_tokens.pow(2).mean(dim=-1)
-    cam_tokens = cam_tokens.squeeze(0)  # [num_patches]
-
-    num_patches = cam_tokens.numel()
-
-    grid_h = int(num_patches ** 0.5)
-    grid_w = grid_h
-    if grid_h * grid_w != num_patches:
-        patch_size = model.backbone.patch_size
-        if isinstance(patch_size, int):
-            patch_h = patch_w = patch_size
-        else:
-            patch_h, patch_w = patch_size
-        grid_h = img_tensor.shape[-2] // patch_h
-        grid_w = img_tensor.shape[-1] // patch_w
-        if grid_h * grid_w != num_patches:
-            raise RuntimeError(
-                f"Cannot reshape {num_patches} ViT tokens into a {grid_h}x{grid_w} grid"
-            )
-
-    cam = cam_tokens.reshape(grid_h, grid_w)
-    cam = F.interpolate(
-        cam.unsqueeze(0).unsqueeze(0),
-        size=img_tensor.shape[-2:],
-        mode="bilinear",
-        align_corners=False,
-    )[0, 0]
-    cam = cam.detach().cpu().numpy()
-    cam_min = cam.min()
-    cam_max = cam.max()
-    if cam_max > cam_min:
-        cam = (cam - cam_min) / (cam_max - cam_min)
-    else:
-        cam = np.zeros_like(cam)
-
-    pred_class = logits.argmax(1).item()
-    return cam, pred_class
-
 def overlay_heatmap(orig_img_bgr, cam, alpha=0.35):
-    heatmap = cv2.applyColorMap((cam*255).astype(np.uint8), cv2.COLORMAP_JET)
-    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-    overlay = (alpha * heatmap + (1 - alpha) * orig_img_bgr).astype(np.uint8)
-
-    return overlay
+    heatmap_bgr = cv2.applyColorMap((cam * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    overlay = (alpha * heatmap_bgr.astype(np.float32) + (1 - alpha) * orig_img_bgr.astype(np.float32))
+    return overlay.astype(np.uint8)
 
 def disable_inplace_relu(m: nn.Module):
     for child in m.children():
@@ -219,18 +122,19 @@ def main():
     elif arch == "efficientnet_b0":
         target_layer = model.backbone.features[-1]
     elif arch == "vit_b_16":
-        target_layer = None
+        target_layer = model.backbone.encoder.layers[-1].ln_1
     else:
         raise ValueError(f"Unknown arch for Grad-CAM: {arch}")
 
     if arch == "vit_b_16":
-        cam, pred_class = vit_gradcam_on_image(model, x)
+        vit_cam = VITGradCam(model, target_layer, input_size=224, patch_size=16)
+        cam, pred_class = vit_cam(x)
     else:
         cam, pred_class = gradcam_on_image(model, x, target_layer=target_layer)
     
     orig_bgr = cv2.cvtColor(orig, cv2.COLOR_RGB2BGR)
     orig_bgr = cv2.resize(orig_bgr, (cam.shape[1], cam.shape[0]))
-    
+
     overlay = overlay_heatmap(orig_bgr, cam)
     cv2.imwrite(args.out_path, overlay)
     print(f"Saved Grad-CAM to {args.out_path}. Pred class id: {pred_class}")

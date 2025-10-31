@@ -18,7 +18,7 @@ AUG_POLICIES = {
 }
 
 class AlbumentationsTransform:
-    """Convert PIL image > repeated grayscale > Albumentations → tensor."""
+    """Convert PIL image > repeated grayscale > Albumentations > tensor."""
     def __init__(self, aug):
         self.aug = aug
 
