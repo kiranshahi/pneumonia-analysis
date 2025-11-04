@@ -1,5 +1,5 @@
 
-# Weakly Supervised Pneumonia Localization from Chest X-Rays Using Deep Neural Network and Grad-CAM Explanations
+### Weakly Supervised Pneumonia Localization from Chest X-Rays Using Deep Neural Network and Grad-CAM Explanations
 
 Train, evaluate, and visualize Grad-CAM for binary chest X-ray classification (Normal vs Pneumonia) with **consistent preprocessing**, **patient-wise split**, and **multi-model ensembling**.
 
@@ -17,78 +17,14 @@ pneumonia-analysis/
     ensemble_eval.py
     utils.py
   requirements.txt
-  README.md
 ```
+#### Localized result using Grad-CAM 
 
-## Colab quickstart
+![Result on Chest X-ray dataset.](docs/img/Grad-CAM.png)
 
-1) Upload/clone this project into Colab.
-
-2) Install deps:
-```bash
-%cd /content/pneumonia-analysis
-!pip install -r requirements.txt
-```
-
-3) Mount Drive and set dataset path (folder containing `Normal/` and `Pneumonia/`):
-```python
-from google.colab import drive
-drive.mount('/content/drive')
-data_dir = '/content/drive/MyDrive/Chest_xray'  # adjust
-```
-
-### Train single model (choose arch)
-```bash
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/resnet18" --epochs 5 --arch resnet18
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/densenet121" --epochs 5 --arch densenet121
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/efficientnet_b0" --epochs 5 --arch efficientnet_b0
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/resnet50" --epochs 5 --arch resnet50
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/mobilenet_v2" --epochs 5 --arch mobilenet_v2
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/mobilenet_v3" --epochs 5 --arch mobilenet_v3
-python -m src.train --data_dir "$data_dir" --out_dir "/content/drive/MyDrive/pneumonia_runs/vit_b_16" --epochs 5 --arch vit_b_16
-```
-
-### Train many in one go
-```bash
-python -m src.train_many --data_dir "$data_dir" --out_root "/content/drive/MyDrive/pneumonia_runs/archs" --epochs 5
-```
-Default trains `resnet18,resnet50,densenet121,efficientnet_b0,mobilenet_v2,mobilenet_v3,vit_b_16`.
-
-### Evaluate a single model
-```bash
-python -m src.eval --data_dir "$data_dir" --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt"
-```
-
-### Evaluate an ensemble
-Uniform average:
-```bash
-python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/resnet50/best_resnet50.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v2/best_mobilenet_v2.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v3/best_mobilenet_v3.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/vit_b_16/best_vit_b_16.pt"   --weights uniform
-```
-AUC-weighted average (uses validation AUC stored in each checkpoint):
-```bash
-python -m src.ensemble_eval --data_dir "$data_dir"   --checkpoints "/content/drive/MyDrive/pneumonia_runs/archs/resnet18/best_resnet18.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/resnet50/best_resnet50.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/densenet121/best_densenet121.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/efficientnet_b0/best_efficientnet_b0.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v2/best_mobilenet_v2.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/mobilenet_v3/best_mobilenet_v3.pt,
-                                                                    /content/drive/MyDrive/pneumonia_runs/archs/vit_b_16/best_vit_b_16.pt"   --weights auto_auc
-```
-
-### Grad-CAM on any trained checkpoint
-```bash
-python -m src.gradcam --checkpoint "/content/drive/MyDrive/pneumonia_runs/resnet18/best_resnet18.pt" --image_path "/content/drive/MyDrive/Chest_xray/Pneumonia/person1413_virus_2423.jpg" --out_path "/content/gradcam_resnet18.png"
-```
+*Results on the Chest X-ray dataset[^1].*
 
 *Grad-CAM currently supports CNN backbones (ResNet, DenseNet, EfficientNet, MobileNet V2/V3) but not ViT.*
 
-**Notes**
-- Uses **ImageNet normalization** consistently across train/eval/Grad-CAM.
-- Patient-wise split inferred from filename prefix (e.g., `person1234_*`). Adjust `infer_patient_id` if needed.
-- Checkpoints store `arch`, `val_acc`, `val_auc` for later AUC-weighted ensembling.
+
+[^1]: https://www.sciencedirect.com/science/article/pii/S0092867418301545
