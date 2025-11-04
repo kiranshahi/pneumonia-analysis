@@ -24,7 +24,4 @@ pneumonia-analysis/
 
 *Results on the Chest X-ray dataset[^1].*
 
-*Grad-CAM currently supports CNN backbones (ResNet, DenseNet, EfficientNet, MobileNet V2/V3) but not ViT.*
-
-
 [^1]: https://www.sciencedirect.com/science/article/pii/S0092867418301545
