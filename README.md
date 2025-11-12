@@ -1,7 +1,6 @@
 
 ### Weakly Supervised Pneumonia Localization from Chest X-Rays Using Deep Neural Network and Grad-CAM Explanations
 
-Train, evaluate, and visualize Grad-CAM for binary chest X-ray classification (Normal vs Pneumonia) with **consistent preprocessing**, **patient-wise split**, and **multi-model ensembling**.
 
 #### Project layout
 ```
@@ -25,7 +24,7 @@ requirements.txt
 
 #### Pretrained Weights
 
-You can download pretrained model checkpoints from the following links:
+Download pretrained model checkpoints from the following links:
 
 | Model | Parameters (M) | Download |
 |:--|:--:|:--:|
